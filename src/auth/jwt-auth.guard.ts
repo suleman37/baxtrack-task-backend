@@ -9,6 +9,13 @@ import { verify } from 'jsonwebtoken';
 import type { Request } from 'express';
 
 const JWT_SECRET = process.env.JWT_SECRET || '';
+type AuthenticatedRequest = Request & {
+  user?: {
+    id: number;
+    email?: string;
+    organizationId?: number | null;
+  };
+};
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -17,7 +24,7 @@ export class JwtAuthGuard implements CanActivate {
       throw new InternalServerErrorException('JWT secret is not configured.');
     }
 
-    const request = context.switchToHttp().getRequest<Request>();
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const token = this.extractToken(request);
 
     if (!token) {
@@ -25,7 +32,22 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
-      verify(token, JWT_SECRET);
+      const payload = verify(token, JWT_SECRET) as {
+        sub?: string;
+        email?: string;
+        organizationId?: number | null;
+      };
+      const userId = Number(payload.sub);
+
+      if (!Number.isInteger(userId) || userId <= 0) {
+        throw new UnauthorizedException('Invalid or expired token.');
+      }
+
+      request.user = {
+        id: userId,
+        email: payload.email,
+        organizationId: payload.organizationId,
+      };
       return true;
     } catch {
       throw new UnauthorizedException('Invalid or expired token.');

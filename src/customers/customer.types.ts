@@ -1,9 +1,7 @@
 export interface CreateCustomerPayload {
-  id: number;
   name: string;
   email: string;
   phone: string;
-  organizationId: number;
   assignedTo: number;
 }
 
@@ -12,7 +10,8 @@ export interface CustomerResponse {
   name: string;
   email: string;
   phone: string;
-  organizationId: number;
+  organizationId: number | null;
+  createdById: number | null;
   assignedTo: number;
   createdAt: Date;
   updatedAt: Date;

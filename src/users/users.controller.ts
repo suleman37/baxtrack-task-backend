@@ -2,11 +2,11 @@ import {
   Body,
   Controller,
   Get,
-  Param,
-  ParseIntPipe,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type {
   CreateUserPayload,
@@ -21,17 +21,17 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  findAll(): Promise<UserDetailsResponse[]> {
-    return this.usersService.findAll();
-  }
-
-  @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number): Promise<UserDetailsResponse> {
-    return this.usersService.findOne(id);
+  findAll(
+    @Req() request: Request & { user?: { id: number } },
+  ): Promise<UserDetailsResponse[]> {
+    return this.usersService.findAll(request.user?.id);
   }
 
   @Post()
-  create(@Body() user: CreateUserPayload): Promise<UserResponse> {
-    return this.usersService.create(user);
+  create(
+    @Body() user: CreateUserPayload,
+    @Req() request: Request & { user?: { id: number } },
+  ): Promise<UserResponse> {
+    return this.usersService.create(user, request.user?.id);
   }
 }

@@ -12,6 +12,7 @@ import {
   CustomerResponse,
 } from './customer.types';
 import { Customer } from './customer.entity';
+import { syncPrimaryKeySequence } from '../database/sync-primary-key-sequence';
 
 @Injectable()
 export class CustomersService {
@@ -22,7 +23,10 @@ export class CustomersService {
     private readonly usersRepository: Repository<User>,
   ) {}
 
-  async create(customer: CreateCustomerPayload): Promise<CustomerResponse> {
+  async create(
+    customer: CreateCustomerPayload,
+    createdById?: number,
+  ): Promise<CustomerResponse> {
     this.validateCustomer(customer);
 
     const assignedUser = await this.usersRepository.findOne({
@@ -35,13 +39,13 @@ export class CustomersService {
       throw new NotFoundException('Assigned user not found.');
     }
 
+    await syncPrimaryKeySequence(this.customersRepository);
     const savedCustomer = await this.customersRepository.save(
       this.customersRepository.create({
-        id: customer.id,
         name: customer.name.trim(),
         email: customer.email.trim().toLowerCase(),
         phone: customer.phone.trim(),
-        organizationId: customer.organizationId,
+        createdById: createdById ?? null,
         assignedTo: assignedUser,
       }),
     );
@@ -105,11 +109,9 @@ export class CustomersService {
   private validateCustomer(customer: CreateCustomerPayload): void {
     if (
       !customer ||
-      typeof customer.id !== 'number' ||
       typeof customer.name !== 'string' ||
       typeof customer.email !== 'string' ||
       typeof customer.phone !== 'string' ||
-      typeof customer.organizationId !== 'number' ||
       typeof customer.assignedTo !== 'number'
     ) {
       throw new BadRequestException('Invalid customer payload.');
@@ -135,6 +137,7 @@ export class CustomersService {
       email: customer.email,
       phone: customer.phone,
       organizationId: customer.organizationId,
+      createdById: customer.createdById,
       assignedTo: customer.assignedTo.id,
       createdAt: customer.createdAt,
       updatedAt: customer.updatedAt,

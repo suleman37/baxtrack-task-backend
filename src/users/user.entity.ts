@@ -1,9 +1,9 @@
-import { Column, Entity, PrimaryColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 import type { UserRole } from '../enums/user-role.enum';
 
 @Entity('users')
 export class User {
-  @PrimaryColumn()
+  @PrimaryGeneratedColumn()
   id: number;
 
   @Column()
@@ -20,4 +20,7 @@ export class User {
 
   @Column({ type: 'integer', nullable: true })
   organizationId: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  createdById: number | null;
 }

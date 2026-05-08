@@ -15,7 +15,7 @@ function getRequiredEnv(name: string): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
-
+  
   return value;
 }
 @Module({

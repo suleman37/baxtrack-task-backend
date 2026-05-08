@@ -6,8 +6,10 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type {
   CreateCustomerPayload,
@@ -32,8 +34,11 @@ export class CustomersController {
   }
 
   @Post()
-  create(@Body() customer: CreateCustomerPayload): Promise<CustomerResponse> {
-    return this.customersService.create(customer);
+  create(
+    @Body() customer: CreateCustomerPayload,
+    @Req() request: Request & { user?: { id: number } },
+  ): Promise<CustomerResponse> {
+    return this.customersService.create(customer, request.user?.id);
   }
 
   @Delete(':id')

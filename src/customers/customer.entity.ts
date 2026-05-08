@@ -5,14 +5,14 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
-  PrimaryColumn,
+  PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../users/user.entity';
 
 @Entity('customers')
 export class Customer {
-  @PrimaryColumn()
+  @PrimaryGeneratedColumn()
   id: number;
 
   @Column()
@@ -24,8 +24,11 @@ export class Customer {
   @Column()
   phone: string;
 
-  @Column({ type: 'integer' })
-  organizationId: number;
+  @Column({ type: 'integer', nullable: true })
+  organizationId: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  createdById: number | null;
 
   @ManyToOne(() => User, { nullable: false })
   @JoinColumn({ name: 'assignedTo' })

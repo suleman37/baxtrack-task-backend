@@ -2,12 +2,13 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
-  NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomBytes, scrypt as scryptCallback } from 'node:crypto';
 import { promisify } from 'node:util';
 import { Repository } from 'typeorm';
+import { syncPrimaryKeySequence } from '../database/sync-primary-key-sequence';
 import { User } from './user.entity';
 import { CreateUserPayload, UserDetailsResponse, UserResponse } from './user.types';
 
@@ -20,7 +21,10 @@ export class UsersService {
     private readonly usersRepository: Repository<User>,
   ) {}
 
-  async create(user: CreateUserPayload): Promise<UserResponse> {
+  async create(
+    user: CreateUserPayload,
+    createdById?: number,
+  ): Promise<UserResponse> {
     this.validateUser(user);
     const email = user.email.trim().toLowerCase();
     const emailExists = await this.usersRepository
@@ -33,14 +37,14 @@ export class UsersService {
     }
 
     const hashedPassword = await this.hashPassword(user.password);
+    await syncPrimaryKeySequence(this.usersRepository);
     await this.usersRepository.save(
       this.usersRepository.create({
-        id: user.id,
         name: user.name.trim(),
         email,
         password: hashedPassword,
         role: user.role,
-        organizationId: user.organizationId,
+        createdById: createdById ?? null,
       }),
     );
 
@@ -49,8 +53,15 @@ export class UsersService {
     };
   }
 
-  async findAll(): Promise<UserDetailsResponse[]> {
+  async findAll(createdById?: number): Promise<UserDetailsResponse[]> {
+    if (!Number.isInteger(createdById) || createdById! <= 0) {
+      throw new UnauthorizedException('Invalid or expired token.');
+    }
+
     const users = await this.usersRepository.find({
+      where: {
+        createdById,
+      },
       order: {
         id: 'ASC',
       },
@@ -59,28 +70,12 @@ export class UsersService {
     return users.map((user) => this.toUserResponse(user));
   }
 
-  async findOne(id: number): Promise<UserDetailsResponse> {
-    const user = await this.usersRepository.findOne({
-      where: {
-        id,
-      },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found.');
-    }
-
-    return this.toUserResponse(user);
-  }
-
   private validateUser(user: CreateUserPayload): void {
     if (
       !user ||
-      typeof user.id !== 'number' ||
       typeof user.name !== 'string' ||
       typeof user.email !== 'string' ||
-      typeof user.password !== 'string' ||
-      typeof user.organizationId !== 'number'
+      typeof user.password !== 'string'
     ) {
       throw new BadRequestException('Invalid user payload.');
     }
@@ -95,8 +90,8 @@ export class UsersService {
       );
     }
 
-    if (user.role !== 'admin' && user.role !== 'member') {
-      throw new BadRequestException('Role must be admin or member.');
+    if (user.role !== 'admin' && user.role !== 'user') {
+      throw new BadRequestException('Role must be admin or user.');
     }
   }
 
@@ -113,6 +108,7 @@ export class UsersService {
       email: user.email,
       role: user.role,
       organizationId: user.organizationId,
+      createdById: user.createdById,
     };
   }
 }
