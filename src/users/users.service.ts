@@ -9,11 +9,7 @@ import { randomBytes, scrypt as scryptCallback } from 'node:crypto';
 import { promisify } from 'node:util';
 import { Repository } from 'typeorm';
 import { User } from './user.entity';
-import {
-  CreateUserPayload,
-  UserDetailsResponse,
-  UserResponse,
-} from './user.types';
+import { CreateUserPayload, UserDetailsResponse, UserResponse } from './user.types';
 
 const scrypt = promisify(scryptCallback);
 
@@ -49,7 +45,7 @@ export class UsersService {
     );
 
     return {
-      message: 'User created successfully'
+      message: 'User created successfully',
     };
   }
 
