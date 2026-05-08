@@ -6,7 +6,9 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  UseGuards,
 } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type {
   CreateCustomerPayload,
   CustomerMutationResponse,
@@ -15,6 +17,7 @@ import type {
 import { CustomersService } from './customers.service';
 
 @Controller('customers')
+@UseGuards(JwtAuthGuard)
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
