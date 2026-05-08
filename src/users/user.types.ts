@@ -12,3 +12,11 @@ export interface CreateUserPayload {
 export interface UserResponse {
   message: string;
 }
+
+export interface UserDetailsResponse {
+  id: number;
+  name: string;
+  email: string;
+  role: UserRole | null;
+  organizationId: number | null;
+}

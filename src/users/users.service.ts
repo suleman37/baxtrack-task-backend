@@ -2,13 +2,18 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomBytes, scrypt as scryptCallback } from 'node:crypto';
 import { promisify } from 'node:util';
 import { Repository } from 'typeorm';
 import { User } from './user.entity';
-import { CreateUserPayload, UserResponse } from './user.types';
+import {
+  CreateUserPayload,
+  UserDetailsResponse,
+  UserResponse,
+} from './user.types';
 
 const scrypt = promisify(scryptCallback);
 
@@ -48,6 +53,30 @@ export class UsersService {
     };
   }
 
+  async findAll(): Promise<UserDetailsResponse[]> {
+    const users = await this.usersRepository.find({
+      order: {
+        id: 'ASC',
+      },
+    });
+
+    return users.map((user) => this.toUserResponse(user));
+  }
+
+  async findOne(id: number): Promise<UserDetailsResponse> {
+    const user = await this.usersRepository.findOne({
+      where: {
+        id,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+
+    return this.toUserResponse(user);
+  }
+
   private validateUser(user: CreateUserPayload): void {
     if (
       !user ||
@@ -79,5 +108,15 @@ export class UsersService {
     const salt = randomBytes(16).toString('hex');
     const derivedKey = (await scrypt(password, salt, 64)) as Buffer;
     return `${salt}:${derivedKey.toString('hex')}`;
+  }
+
+  private toUserResponse(user: User): UserDetailsResponse {
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      organizationId: user.organizationId,
+    };
   }
 }
