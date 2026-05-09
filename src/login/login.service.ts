@@ -50,14 +50,14 @@ export class LoginService {
         {
           email: user.email,
           organizationId: user.organizationId,
+          role: user.role,
         },
         JWT_SECRET,
         {
           subject: String(user.id),
         },
       ),
-      User_ID: user.id,
-      Organization_ID: user.organizationId,
+      role: user.role,
     };
   }
 

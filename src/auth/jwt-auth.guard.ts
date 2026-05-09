@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { verify } from 'jsonwebtoken';
 import type { Request } from 'express';
+import type { UserRole } from '../enums/user-role.enum';
 
 const JWT_SECRET = process.env.JWT_SECRET || '';
 type AuthenticatedRequest = Request & {
@@ -14,6 +15,7 @@ type AuthenticatedRequest = Request & {
     id: number;
     email?: string;
     organizationId?: number | null;
+    role?: UserRole | null;
   };
 };
 
@@ -36,6 +38,7 @@ export class JwtAuthGuard implements CanActivate {
         sub?: string;
         email?: string;
         organizationId?: number | null;
+        role?: UserRole | null;
       };
       const userId = Number(payload.sub);
 
@@ -47,6 +50,7 @@ export class JwtAuthGuard implements CanActivate {
         id: userId,
         email: payload.email,
         organizationId: payload.organizationId,
+        role: payload.role,
       };
       return true;
     } catch {

@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import type { UserRole } from '../enums/user-role.enum';
 import type {
   CreateUserPayload,
   UserDetailsResponse,
@@ -30,8 +31,8 @@ export class UsersController {
   @Post()
   create(
     @Body() user: CreateUserPayload,
-    @Req() request: Request & { user?: { id: number } },
+    @Req() request: Request & { user?: { id: number; role?: UserRole | null } },
   ): Promise<UserResponse> {
-    return this.usersService.create(user, request.user?.id);
+    return this.usersService.create(user, request.user?.id, request.user?.role);
   }
 }

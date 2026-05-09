@@ -21,6 +21,9 @@ export class User {
   @Column({ type: 'integer', nullable: true })
   organizationId: number | null;
 
+  @Column({ type: 'varchar', nullable: true })
+  organizationName: string | null;
+
   @Column({ type: 'integer', nullable: true })
   createdById: number | null;
 }

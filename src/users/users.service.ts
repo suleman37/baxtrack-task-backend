@@ -5,14 +5,16 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { randomBytes, scrypt as scryptCallback } from 'node:crypto';
-import { promisify } from 'node:util';
 import { Repository } from 'typeorm';
 import { syncPrimaryKeySequence } from '../database/sync-primary-key-sequence';
+import {
+  CREATABLE_USER_ROLES,
+  isCreatableUserRole,
+  type UserRole,
+} from '../enums/user-role.enum';
 import { User } from './user.entity';
+import { hashPassword } from './password.util';
 import { CreateUserPayload, UserDetailsResponse, UserResponse } from './user.types';
-
-const scrypt = promisify(scryptCallback);
 
 @Injectable()
 export class UsersService {
@@ -24,8 +26,9 @@ export class UsersService {
   async create(
     user: CreateUserPayload,
     createdById?: number,
+    createdByRole?: UserRole | null,
   ): Promise<UserResponse> {
-    this.validateUser(user);
+    this.validateUser(user, createdByRole);
     const email = user.email.trim().toLowerCase();
     const emailExists = await this.usersRepository
       .createQueryBuilder('user')
@@ -36,14 +39,17 @@ export class UsersService {
       throw new ConflictException('User already Registered');
     }
 
-    const hashedPassword = await this.hashPassword(user.password);
+    const hashedPassword = await hashPassword(user.password);
+    const roleToSave = createdByRole === 'super_admin' ? 'admin' : user.role!;
+    const organizationName = user.organizationName?.trim() || null;
     await syncPrimaryKeySequence(this.usersRepository);
     await this.usersRepository.save(
       this.usersRepository.create({
         name: user.name.trim(),
         email,
         password: hashedPassword,
-        role: user.role,
+        role: roleToSave,
+        organizationName,
         createdById: createdById ?? null,
       }),
     );
@@ -70,7 +76,10 @@ export class UsersService {
     return users.map((user) => this.toUserResponse(user));
   }
 
-  private validateUser(user: CreateUserPayload): void {
+  private validateUser(
+    user: CreateUserPayload,
+    createdByRole?: UserRole | null,
+  ): void {
     if (
       !user ||
       typeof user.name !== 'string' ||
@@ -90,15 +99,22 @@ export class UsersService {
       );
     }
 
-    if (user.role !== 'admin' && user.role !== 'user') {
-      throw new BadRequestException('Role must be admin or user.');
+    if (
+      user.organizationName != null &&
+      typeof user.organizationName !== 'string'
+    ) {
+      throw new BadRequestException('Organization name must be a string.');
     }
-  }
 
-  private async hashPassword(password: string): Promise<string> {
-    const salt = randomBytes(16).toString('hex');
-    const derivedKey = (await scrypt(password, salt, 64)) as Buffer;
-    return `${salt}:${derivedKey.toString('hex')}`;
+    if (createdByRole === 'super_admin') {
+      return;
+    }
+
+    if (!isCreatableUserRole(user.role)) {
+      throw new BadRequestException(
+        `Role must be one of: ${CREATABLE_USER_ROLES.join(', ')}.`,
+      );
+    }
   }
 
   private toUserResponse(user: User): UserDetailsResponse {
@@ -108,6 +124,7 @@ export class UsersService {
       email: user.email,
       role: user.role,
       organizationId: user.organizationId,
+      organizationName: user.organizationName,
       createdById: user.createdById,
     };
   }

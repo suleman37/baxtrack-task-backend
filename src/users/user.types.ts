@@ -4,7 +4,8 @@ export interface CreateUserPayload {
   name: string;
   email: string;
   password: string;
-  role: UserRole;
+  role?: UserRole;
+  organizationName?: string | null;
 }
 
 export interface UserResponse {
@@ -17,5 +18,6 @@ export interface UserDetailsResponse {
   email: string;
   role: UserRole | null;
   organizationId: number | null;
+  organizationName: string | null;
   createdById: number | null;
 }
