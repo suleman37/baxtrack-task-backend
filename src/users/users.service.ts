@@ -16,6 +16,12 @@ import { User } from './user.entity';
 import { hashPassword } from './password.util';
 import { CreateUserPayload, UserDetailsResponse, UserResponse } from './user.types';
 
+interface CreatorContext {
+  id: number;
+  organizationId?: number | null;
+  role?: UserRole | null;
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -25,9 +31,10 @@ export class UsersService {
 
   async create(
     user: CreateUserPayload,
-    createdById?: number,
-    createdByRole?: UserRole | null,
+    creator?: CreatorContext,
   ): Promise<UserResponse> {
+    const createdByRole = creator?.role;
+
     this.validateUser(user, createdByRole);
     const email = user.email.trim().toLowerCase();
     const emailExists = await this.usersRepository
@@ -42,17 +49,24 @@ export class UsersService {
     const hashedPassword = await hashPassword(user.password);
     const roleToSave = createdByRole === 'super_admin' ? 'admin' : user.role!;
     const organizationName = user.organizationName?.trim() || null;
+    const organizationId = this.resolveOrganizationId(roleToSave, creator);
     await syncPrimaryKeySequence(this.usersRepository);
-    await this.usersRepository.save(
+    const savedUser = await this.usersRepository.save(
       this.usersRepository.create({
         name: user.name.trim(),
         email,
         password: hashedPassword,
         role: roleToSave,
+        organizationId,
         organizationName,
-        createdById: createdById ?? null,
+        createdById: creator?.id ?? null,
       }),
     );
+
+    if (roleToSave === 'admin' && savedUser.organizationId !== savedUser.id) {
+      savedUser.organizationId = savedUser.id;
+      await this.usersRepository.save(savedUser);
+    }
 
     return {
       message: 'User created successfully',
@@ -115,6 +129,21 @@ export class UsersService {
         `Role must be one of: ${CREATABLE_USER_ROLES.join(', ')}.`,
       );
     }
+  }
+
+  private resolveOrganizationId(
+    roleToSave: UserRole,
+    creator?: CreatorContext,
+  ): number | null {
+    if (roleToSave === 'admin') {
+      return null;
+    }
+
+    if (!creator?.id) {
+      return null;
+    }
+
+    return creator.organizationId ?? creator.id;
   }
 
   private toUserResponse(user: User): UserDetailsResponse {

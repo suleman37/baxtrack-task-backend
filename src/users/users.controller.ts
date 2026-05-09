@@ -16,23 +16,29 @@ import type {
 } from './user.types';
 import { UsersService } from './users.service';
 
+type AuthenticatedRequest = Request & {
+  user?: {
+    id: number;
+    organizationId?: number | null;
+    role?: UserRole | null;
+  };
+};
+
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  findAll(
-    @Req() request: Request & { user?: { id: number } },
-  ): Promise<UserDetailsResponse[]> {
+  findAll(@Req() request: AuthenticatedRequest): Promise<UserDetailsResponse[]> {
     return this.usersService.findAll(request.user?.id);
   }
 
   @Post()
   create(
     @Body() user: CreateUserPayload,
-    @Req() request: Request & { user?: { id: number; role?: UserRole | null } },
+    @Req() request: AuthenticatedRequest,
   ): Promise<UserResponse> {
-    return this.usersService.create(user, request.user?.id, request.user?.role);
+    return this.usersService.create(user, request.user);
   }
 }
