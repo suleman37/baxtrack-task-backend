@@ -8,6 +8,7 @@ import { scrypt as scryptCallback } from 'node:crypto';
 import { sign } from 'jsonwebtoken';
 import { promisify } from 'node:util';
 import { Repository } from 'typeorm';
+import { LogsService } from '../logs/logs.service';
 import { User } from '../users/user.entity';
 import { LoginPayload, LoginResponse } from './login.types';
 
@@ -19,6 +20,7 @@ export class LoginService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly logsService: LogsService,
   ) {}
 
   async login(credentials: LoginPayload): Promise<LoginResponse> {
@@ -43,6 +45,14 @@ export class LoginService {
     ) {
       throw new UnauthorizedException('Invalid email or password.');
     }
+
+    await this.logsService.recordAction({
+      action: 'login',
+      actorId: user.id,
+      userId: user.id,
+      organizationId: user.organizationId ?? user.id,
+      details: `User ${user.name} logged in.`,
+    });
 
     return {
       message: 'Login successful',

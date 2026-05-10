@@ -9,6 +9,7 @@ import {
   type AccessActor,
   resolveCustomerOrganizationKey,
 } from '../auth/access-context.util';
+import { LogsService } from '../logs/logs.service';
 import { User } from '../users/user.entity';
 import {
   CreateCustomerPayload,
@@ -25,6 +26,7 @@ export class CustomersService {
     private readonly customersRepository: Repository<Customer>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly logsService: LogsService,
   ) {}
 
   async create(customer: CreateCustomerPayload, creator: AccessActor): Promise<CustomerResponse> {
@@ -51,6 +53,14 @@ export class CustomersService {
         assignedTo: assignedUser,
       }),
     );
+
+    await this.logsService.recordAction({
+      action: 'create_customer',
+      actorId: creator.id,
+      userId: creator.id,
+      organizationId: creator.organizationId ?? creator.id,
+      details: `Created customer ${savedCustomer.name} and assigned it to ${assignedUser.name}.`,
+    });
 
     return this.toCustomerResponse(savedCustomer);
   }
@@ -102,6 +112,15 @@ export class CustomersService {
 
     customer.status = customer.status === 'deleted' ? 'active' : 'deleted';
     await this.customersRepository.save(customer);
+
+    await this.logsService.recordAction({
+      action:
+        customer.status === 'deleted' ? 'delete_customer' : 'restore_customer',
+      actorId: actor.id,
+      userId: actor.id,
+      organizationId: customer.organizationId,
+      details: `${customer.status === 'deleted' ? 'Deleted' : 'Restored'} customer ${customer.name}.`,
+    });
 
     return {
       message:

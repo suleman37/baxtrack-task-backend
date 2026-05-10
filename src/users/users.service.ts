@@ -13,6 +13,7 @@ import {
   type UserRole,
 } from '../enums/user-role.enum';
 import type { AccessActor } from '../auth/access-context.util';
+import { LogsService } from '../logs/logs.service';
 import { User } from './user.entity';
 import { hashPassword } from './password.util';
 import { CreateUserPayload, UserDetailsResponse, UserResponse } from './user.types';
@@ -28,6 +29,7 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly logsService: LogsService,
   ) {}
 
   async create(
@@ -67,6 +69,16 @@ export class UsersService {
     if (roleToSave === 'admin' && savedUser.organizationId !== savedUser.id) {
       savedUser.organizationId = savedUser.id;
       await this.usersRepository.save(savedUser);
+    }
+
+    if (creator?.id) {
+      await this.logsService.recordAction({
+        action: 'create_user',
+        actorId: creator.id,
+        userId: savedUser.id,
+        organizationId: savedUser.organizationId ?? savedUser.id,
+        details: `Created ${savedUser.role} user ${savedUser.name} (${savedUser.email}).`,
+      });
     }
 
     return {
