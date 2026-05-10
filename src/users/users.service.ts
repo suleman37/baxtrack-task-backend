@@ -6,17 +6,21 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { syncPrimaryKeySequence } from '../database/sync-primary-key-sequence';
+import { syncPrimaryKeySequence } from '../common/utils/sync-primary-key-sequence';
 import {
   CREATABLE_USER_ROLES,
   isCreatableUserRole,
   type UserRole,
-} from '../enums/user-role.enum';
-import type { AccessActor } from '../auth/access-context.util';
+} from '../common/enums/user-role.enum';
 import { LogsService } from '../logs/logs.service';
+import type { AccessActor } from '../types/common/access-context.types';
+import {
+  CreateUserPayload,
+  UserDetailsResponse,
+  UserResponse,
+} from '../types/users/user.types';
 import { User } from './user.entity';
-import { hashPassword } from './password.util';
-import { CreateUserPayload, UserDetailsResponse, UserResponse } from './user.types';
+import { hashPassword } from '../common/utils/password.util';
 
 interface CreatorContext {
   id: number;

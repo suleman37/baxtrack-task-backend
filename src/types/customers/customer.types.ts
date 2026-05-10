@@ -1,3 +1,5 @@
+import type { CustomerStatus } from '../../common/enums/customer-status.enum';
+
 export interface CreateCustomerPayload {
   name: string;
   email: string;
@@ -24,7 +26,7 @@ export interface CustomerResponse {
   organizationId: number | null;
   createdById: number | null;
   notes: CustomerNote[];
-  status: string;
+  status: CustomerStatus;
   assignedTo: number;
   assignedToName: string;
   createdAt: Date;

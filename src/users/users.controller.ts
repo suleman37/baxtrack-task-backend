@@ -4,41 +4,26 @@ import {
   Get,
   Post,
   Req,
-  UnauthorizedException,
-  UseGuards,
 } from '@nestjs/common';
-import type { Request } from 'express';
 import {
-  type AccessActor,
+  getAccessActorOrThrow,
   resolveCreatorForWrite,
-} from '../auth/access-context.util';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { OrganizationScopeGuard } from '../auth/organization-scope.guard';
-import type { UserRole } from '../enums/user-role.enum';
+} from '../common/auth/access-context.util';
 import type {
   CreateUserPayload,
   UserDetailsResponse,
   UserResponse,
-} from './user.types';
+} from '../types/users/user.types';
+import type { AuthenticatedRequest } from '../types/http/authenticated-request.types';
 import { UsersService } from './users.service';
 
-type AuthenticatedRequest = Request & {
-  user?: {
-    id: number;
-    organizationId?: number | null;
-    role?: UserRole | null;
-  };
-  organizationScope?: number;
-};
-
 @Controller('users')
-@UseGuards(JwtAuthGuard, OrganizationScopeGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
   findAll(@Req() request: AuthenticatedRequest): Promise<UserDetailsResponse[]> {
-    return this.usersService.findAll(this.toAccessActor(request));
+    return this.usersService.findAll(getAccessActorOrThrow(request));
   }
 
   @Post()
@@ -48,21 +33,7 @@ export class UsersController {
   ): Promise<UserResponse> {
     return this.usersService.create(
       user,
-      resolveCreatorForWrite(this.toAccessActor(request)),
+      resolveCreatorForWrite(getAccessActorOrThrow(request)),
     );
-  }
-
-  private toAccessActor(request: AuthenticatedRequest): AccessActor {
-    const u = request.user;
-    if (!u) {
-      throw new UnauthorizedException('Invalid or expired token.');
-    }
-
-    return {
-      id: u.id,
-      organizationId: u.organizationId,
-      role: u.role,
-      organizationScope: request.organizationScope,
-    };
   }
 }

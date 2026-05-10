@@ -1,5 +1,5 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import type { LoginPayload, LoginResponse } from './login.types';
+import type { LoginPayload, LoginResponse } from '../types/login/login.types';
 import { LoginService } from './login.service';
 
 @Controller('login')

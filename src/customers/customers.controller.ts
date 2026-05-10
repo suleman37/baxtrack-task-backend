@@ -8,39 +8,29 @@ import {
   Post,
   Query,
   Req,
-  UnauthorizedException,
-  UseGuards,
 } from '@nestjs/common';
-import type { Request } from 'express';
 import {
-  type AccessActor,
+  getAccessActorOrThrow,
   resolveCreatorForWrite,
-} from '../auth/access-context.util';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { OrganizationScopeGuard } from '../auth/organization-scope.guard';
-import type { UserRole } from '../enums/user-role.enum';
+} from '../common/auth/access-context.util';
+import {
+  DEFAULT_CUSTOMERS_LIMIT,
+  DEFAULT_CUSTOMERS_PAGE,
+  MAX_CUSTOMERS_LIMIT,
+} from '../common/constants/pagination.constants';
 import type {
   CreateCustomerPayload,
   CreateCustomerNotePayload,
   CustomerNote,
   CustomerMutationResponse,
+  PaginatedCustomersResponse,
   CustomerPaginationQuery,
   CustomerResponse,
-  PaginatedCustomersResponse,
-} from './customer.types';
+} from '../types/customers/customer.types';
+import type { AuthenticatedRequest } from '../types/http/authenticated-request.types';
 import { CustomersService } from './customers.service';
 
-type AuthenticatedRequest = Request & {
-  user?: {
-    id: number;
-    organizationId?: number | null;
-    role?: UserRole | null;
-  };
-  organizationScope?: number;
-};
-
 @Controller('customers')
-@UseGuards(JwtAuthGuard, OrganizationScopeGuard)
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
@@ -51,7 +41,7 @@ export class CustomersController {
     @Req() request: AuthenticatedRequest,
   ): Promise<PaginatedCustomersResponse> {
     return this.customersService.findAll(
-      this.toAccessActor(request),
+      getAccessActorOrThrow(request),
       this.toPaginationQuery(page, limit),
     );
   }
@@ -61,7 +51,7 @@ export class CustomersController {
     @Param('id', ParseIntPipe) id: number,
     @Req() request: AuthenticatedRequest,
   ): Promise<CustomerResponse> {
-    return this.customersService.findOne(id, this.toAccessActor(request));
+    return this.customersService.findOne(id, getAccessActorOrThrow(request));
   }
 
   @Get(':id/notes')
@@ -69,7 +59,7 @@ export class CustomersController {
     @Param('id', ParseIntPipe) id: number,
     @Req() request: AuthenticatedRequest,
   ): Promise<CustomerNote[]> {
-    return this.customersService.findNotes(id, this.toAccessActor(request));
+    return this.customersService.findNotes(id, getAccessActorOrThrow(request));
   }
 
   @Post(':id/notes')
@@ -81,7 +71,7 @@ export class CustomersController {
     return this.customersService.addNote(
       id,
       payload,
-      resolveCreatorForWrite(this.toAccessActor(request)),
+      resolveCreatorForWrite(getAccessActorOrThrow(request)),
     );
   }
 
@@ -92,7 +82,7 @@ export class CustomersController {
   ): Promise<CustomerResponse> {
     return this.customersService.create(
       customer,
-      resolveCreatorForWrite(this.toAccessActor(request)),
+      resolveCreatorForWrite(getAccessActorOrThrow(request)),
     );
   }
 
@@ -101,21 +91,7 @@ export class CustomersController {
     @Param('id', ParseIntPipe) id: number,
     @Req() request: AuthenticatedRequest,
   ): Promise<CustomerMutationResponse> {
-    return this.customersService.softDelete(id, this.toAccessActor(request));
-  }
-
-  private toAccessActor(request: AuthenticatedRequest): AccessActor {
-    const u = request.user;
-    if (!u) {
-      throw new UnauthorizedException('Invalid or expired token.');
-    }
-
-    return {
-      id: u.id,
-      organizationId: u.organizationId,
-      role: u.role,
-      organizationScope: request.organizationScope,
-    };
+    return this.customersService.softDelete(id, getAccessActorOrThrow(request));
   }
 
   private toPaginationQuery(
@@ -123,8 +99,12 @@ export class CustomersController {
     limit?: string,
   ): CustomerPaginationQuery {
     return {
-      page: this.parsePositiveInteger(page, 1),
-      limit: this.parsePositiveInteger(limit, 10, 100),
+      page: this.parsePositiveInteger(page, DEFAULT_CUSTOMERS_PAGE),
+      limit: this.parsePositiveInteger(
+        limit,
+        DEFAULT_CUSTOMERS_LIMIT,
+        MAX_CUSTOMERS_LIMIT,
+      ),
     };
   }
 

@@ -6,10 +6,12 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import {
-  type AccessActor,
   resolveCustomerOrganizationKey,
-} from '../auth/access-context.util';
+} from '../common/auth/access-context.util';
+import { CUSTOMER_STATUS } from '../common/enums/customer-status.enum';
+import { syncPrimaryKeySequence } from '../common/utils/sync-primary-key-sequence';
 import { LogsService } from '../logs/logs.service';
+import type { AccessActor } from '../types/common/access-context.types';
 import { User } from '../users/user.entity';
 import {
   CreateCustomerPayload,
@@ -19,9 +21,8 @@ import {
   CustomerPaginationQuery,
   CustomerResponse,
   PaginatedCustomersResponse,
-} from './customer.types';
+} from '../types/customers/customer.types';
 import { Customer } from './customer.entity';
-import { syncPrimaryKeySequence } from '../database/sync-primary-key-sequence';
 
 @Injectable()
 export class CustomersService {
@@ -53,7 +54,7 @@ export class CustomersService {
         phone: customer.phone.trim(),
         organizationId: creator.organizationId ?? creator.id,
         createdById: creator.id,
-        status: 'active',
+        status: CUSTOMER_STATUS.ACTIVE,
         assignedTo: assignedUser,
       }),
     );
@@ -103,7 +104,7 @@ export class CustomersService {
     const customer = await this.customersRepository.findOne({
       where: {
         id,
-        status: 'active',
+        status: CUSTOMER_STATUS.ACTIVE,
       },
       relations: {
         assignedTo: true,
@@ -121,7 +122,7 @@ export class CustomersService {
     const customer = await this.customersRepository.findOne({
       where: {
         id,
-        status: 'active',
+        status: CUSTOMER_STATUS.ACTIVE,
       },
     });
 
@@ -142,7 +143,7 @@ export class CustomersService {
     const customer = await this.customersRepository.findOne({
       where: {
         id,
-        status: 'active',
+        status: CUSTOMER_STATUS.ACTIVE,
       },
       relations: {
         assignedTo: true,
@@ -185,21 +186,26 @@ export class CustomersService {
       throw new NotFoundException('Customer not found.');
     }
 
-    customer.status = customer.status === 'deleted' ? 'active' : 'deleted';
+    customer.status =
+      customer.status === CUSTOMER_STATUS.DELETED
+        ? CUSTOMER_STATUS.ACTIVE
+        : CUSTOMER_STATUS.DELETED;
     await this.customersRepository.save(customer);
 
     await this.logsService.recordAction({
       action:
-        customer.status === 'deleted' ? 'delete_customer' : 'restore_customer',
+        customer.status === CUSTOMER_STATUS.DELETED
+          ? 'delete_customer'
+          : 'restore_customer',
       actorId: actor.id,
       userId: actor.id,
       organizationId: customer.organizationId,
-      details: `${customer.status === 'deleted' ? 'Deleted' : 'Restored'} customer ${customer.name}.`,
+      details: `${customer.status === CUSTOMER_STATUS.DELETED ? 'Deleted' : 'Restored'} customer ${customer.name}.`,
     });
 
     return {
-      message:
-        customer.status === 'deleted'
+        message:
+        customer.status === CUSTOMER_STATUS.DELETED
           ? 'Customer deleted successfully'
           : 'Customer restored successfully',
     };

@@ -7,8 +7,9 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import type { CustomerStatus } from '../common/enums/customer-status.enum';
 import { User } from '../users/user.entity';
-import type { CustomerNote } from './customer.types';
+import type { CustomerNote } from '../types/customers/customer.types';
 
 @Entity('customers')
 export class Customer {
@@ -34,7 +35,7 @@ export class Customer {
   notes: CustomerNote[];
 
   @Column({ type: 'varchar', default: 'active' })
-  status: string;
+  status: CustomerStatus;
 
   @ManyToOne(() => User, { nullable: false })
   @JoinColumn({ name: 'assignedTo' })

@@ -4,16 +4,13 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { scrypt as scryptCallback } from 'node:crypto';
 import { sign } from 'jsonwebtoken';
-import { promisify } from 'node:util';
 import { Repository } from 'typeorm';
+import { JWT_SECRET } from '../common/constants/auth.constants';
+import { comparePassword } from '../common/utils/password.util';
 import { LogsService } from '../logs/logs.service';
+import type { LoginPayload, LoginResponse } from '../types/login/login.types';
 import { User } from '../users/user.entity';
-import { LoginPayload, LoginResponse } from './login.types';
-
-const scrypt = promisify(scryptCallback);
-const JWT_SECRET = process.env.JWT_SECRET || '';
 
 @Injectable()
 export class LoginService {
@@ -41,7 +38,7 @@ export class LoginService {
     if (
       !user ||
       !user.password ||
-      !(await this.comparePassword(credentials.password, user.password))
+      !(await comparePassword(credentials.password, user.password))
     ) {
       throw new UnauthorizedException('Invalid email or password.');
     }
@@ -69,18 +66,5 @@ export class LoginService {
       ),
       role: user.role,
     };
-  }
-
-  private async comparePassword(
-    password: string,
-    storedPassword: string,
-  ): Promise<boolean> {
-    if (!storedPassword.includes(':')) {
-      return storedPassword === password;
-    }
-
-    const [salt, storedHash] = storedPassword.split(':');
-    const derivedKey = (await scrypt(password, salt, 64)) as Buffer;
-    return derivedKey.toString('hex') === storedHash;
   }
 }

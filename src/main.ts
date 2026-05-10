@@ -1,13 +1,15 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
+import { getAppConfig } from './config/app.config';
 import { AppModule } from './app.module';
 
 async function main() {
+  const config = getAppConfig();
   const app = await NestFactory.create(AppModule);
   app.enableCors({
-    origin: 'http://localhost:3000',
+    origin: config.corsOrigin,
   });
-  const port = process.env.PORT || 8080;
+  const port = config.port;
   await app.listen(port);
   console.log(`Server running on Port ${port}`);
 }
