@@ -43,8 +43,9 @@ export class UsersService {
     creator?: CreatorContext,
   ): Promise<UserResponse> {
     const createdByRole = creator?.role;
+    const requestedRole = user.role ?? 'user';
 
-    this.validateUser(user, createdByRole);
+    this.validateUser(user, createdByRole, requestedRole);
     const email = user.email.trim().toLowerCase();
     const emailExists = await this.usersRepository
       .createQueryBuilder('user')
@@ -56,7 +57,8 @@ export class UsersService {
     }
 
     const hashedPassword = await hashPassword(user.password);
-    const roleToSave = createdByRole === 'super_admin' ? 'admin' : user.role!;
+    const roleToSave = createdByRole === 'super_admin' ? 'admin' : requestedRole;
+    await this.ensureAdminUserLimit(roleToSave, creator);
     const organizationName = user.organizationName?.trim() || null;
     const organizationId = this.resolveOrganizationId(roleToSave, creator);
     await syncPrimaryKeySequence(this.usersRepository);
@@ -129,6 +131,7 @@ export class UsersService {
   private validateUser(
     user: CreateUserPayload,
     createdByRole?: UserRole | null,
+    requestedRole?: UserRole,
   ): void {
     if (
       !user ||
@@ -160,7 +163,7 @@ export class UsersService {
       return;
     }
 
-    if (!isCreatableUserRole(user.role)) {
+    if (!isCreatableUserRole(requestedRole)) {
       throw new BadRequestException(
         `Role must be one of: ${CREATABLE_USER_ROLES.join(', ')}.`,
       );
@@ -180,6 +183,26 @@ export class UsersService {
     }
 
     return creator.organizationId ?? creator.id;
+  }
+
+  private async ensureAdminUserLimit(
+    roleToSave: UserRole,
+    creator?: CreatorContext,
+  ): Promise<void> {
+    if (creator?.role !== 'admin' || !creator.id || roleToSave !== 'user') {
+      return;
+    }
+
+    const createdUsersCount = await this.usersRepository.count({
+      where: {
+        createdById: creator.id,
+        role: 'user',
+      },
+    });
+
+    if (createdUsersCount >= 5) {
+      throw new BadRequestException('An admin can create a maximum of 5 users.');
+    }
   }
 
   private toUserResponse(user: User): UserDetailsResponse {
