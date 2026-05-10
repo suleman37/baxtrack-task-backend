@@ -1,4 +1,8 @@
 import type { CustomerStatus } from '../../common/enums/customer-status.enum';
+import type {
+  PaginatedResponse,
+  PaginationQuery,
+} from '../common/pagination.types';
 
 export interface CreateCustomerPayload {
   name: string;
@@ -37,19 +41,8 @@ export interface CustomerMutationResponse {
   message: string;
 }
 
-export interface CustomerPaginationQuery {
-  page: number;
-  limit: number;
-}
+export type CustomerPaginationQuery = PaginationQuery;
 
-export interface CustomerPaginationMeta {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-}
+export type PaginatedCustomersResponse = PaginatedResponse<CustomerResponse>;
 
-export interface PaginatedCustomersResponse {
-  data: CustomerResponse[];
-  pagination: CustomerPaginationMeta;
-}
+export type PaginatedCustomerNotesResponse = PaginatedResponse<CustomerNote>;

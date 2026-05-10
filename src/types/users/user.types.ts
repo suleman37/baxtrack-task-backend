@@ -1,4 +1,5 @@
 import type { UserRole } from '../../common/enums/user-role.enum';
+import type { PaginatedResponse } from '../common/pagination.types';
 
 export interface CreateUserPayload {
   name: string;
@@ -21,3 +22,5 @@ export interface UserDetailsResponse {
   organizationName: string | null;
   createdById: number | null;
 }
+
+export type PaginatedUsersResponse = PaginatedResponse<UserDetailsResponse>;

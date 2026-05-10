@@ -13,18 +13,14 @@ import {
   getAccessActorOrThrow,
   resolveCreatorForWrite,
 } from '../common/auth/access-context.util';
-import {
-  DEFAULT_CUSTOMERS_LIMIT,
-  DEFAULT_CUSTOMERS_PAGE,
-  MAX_CUSTOMERS_LIMIT,
-} from '../common/constants/pagination.constants';
+import { parsePaginationQuery } from '../common/utils/pagination.util';
 import type {
   CreateCustomerPayload,
   CreateCustomerNotePayload,
-  CustomerNote,
   CustomerMutationResponse,
-  PaginatedCustomersResponse,
   CustomerPaginationQuery,
+  PaginatedCustomerNotesResponse,
+  PaginatedCustomersResponse,
   CustomerResponse,
 } from '../types/customers/customer.types';
 import type { AuthenticatedRequest } from '../types/http/authenticated-request.types';
@@ -57,9 +53,15 @@ export class CustomersController {
   @Get(':id/notes')
   findNotes(
     @Param('id', ParseIntPipe) id: number,
+    @Query('page') page: string | undefined,
+    @Query('limit') limit: string | undefined,
     @Req() request: AuthenticatedRequest,
-  ): Promise<CustomerNote[]> {
-    return this.customersService.findNotes(id, getAccessActorOrThrow(request));
+  ): Promise<PaginatedCustomerNotesResponse> {
+    return this.customersService.findNotes(
+      id,
+      getAccessActorOrThrow(request),
+      this.toPaginationQuery(page, limit),
+    );
   }
 
   @Post(':id/notes')
@@ -98,35 +100,6 @@ export class CustomersController {
     page?: string,
     limit?: string,
   ): CustomerPaginationQuery {
-    return {
-      page: this.parsePositiveInteger(page, DEFAULT_CUSTOMERS_PAGE),
-      limit: this.parsePositiveInteger(
-        limit,
-        DEFAULT_CUSTOMERS_LIMIT,
-        MAX_CUSTOMERS_LIMIT,
-      ),
-    };
-  }
-
-  private parsePositiveInteger(
-    value: string | undefined,
-    fallback: number,
-    max?: number,
-  ): number {
-    if (value == null || value.trim().length === 0) {
-      return fallback;
-    }
-
-    const parsedValue = Number(value);
-
-    if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
-      return fallback;
-    }
-
-    if (max != null && parsedValue > max) {
-      return max;
-    }
-
-    return parsedValue;
+    return parsePaginationQuery(page, limit);
   }
 }

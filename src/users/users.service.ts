@@ -14,8 +14,10 @@ import {
 } from '../common/enums/user-role.enum';
 import { LogsService } from '../logs/logs.service';
 import type { AccessActor } from '../types/common/access-context.types';
+import type { PaginationQuery } from '../types/common/pagination.types';
 import {
   CreateUserPayload,
+  PaginatedUsersResponse,
   UserDetailsResponse,
   UserResponse,
 } from '../types/users/user.types';
@@ -90,17 +92,23 @@ export class UsersService {
     };
   }
 
-  async findAll(actor: AccessActor): Promise<UserDetailsResponse[]> {
+  async findAll(
+    actor: AccessActor,
+    pagination: PaginationQuery,
+  ): Promise<PaginatedUsersResponse> {
     const viewerId = actor.id;
     if (!Number.isInteger(viewerId) || viewerId <= 0) {
       throw new UnauthorizedException('Invalid or expired token.');
     }
 
     if (actor.role === 'super_admin' && actor.organizationScope == null) {
-      const users = await this.usersRepository.find({
+      const [users, total] = await this.usersRepository.findAndCount({
         order: { id: 'ASC' },
+        skip: (pagination.page - 1) * pagination.limit,
+        take: pagination.limit,
       });
-      return users.map((user) => this.toUserResponse(user));
+
+      return this.toPaginatedUsersResponse(users, total, pagination);
     }
 
     const createdByFilter =
@@ -108,12 +116,14 @@ export class UsersService {
         ? actor.organizationScope
         : viewerId;
 
-    const users = await this.usersRepository.find({
+    const [users, total] = await this.usersRepository.findAndCount({
       where: { createdById: createdByFilter },
       order: { id: 'ASC' },
+      skip: (pagination.page - 1) * pagination.limit,
+      take: pagination.limit,
     });
 
-    return users.map((user) => this.toUserResponse(user));
+    return this.toPaginatedUsersResponse(users, total, pagination);
   }
 
   private validateUser(
@@ -181,6 +191,22 @@ export class UsersService {
       organizationId: user.organizationId,
       organizationName: user.organizationName,
       createdById: user.createdById,
+    };
+  }
+
+  private toPaginatedUsersResponse(
+    users: User[],
+    total: number,
+    pagination: PaginationQuery,
+  ): PaginatedUsersResponse {
+    return {
+      data: users.map((user) => this.toUserResponse(user)),
+      pagination: {
+        page: pagination.page,
+        limit: pagination.limit,
+        total,
+        totalPages: total === 0 ? 0 : Math.ceil(total / pagination.limit),
+      },
     };
   }
 }

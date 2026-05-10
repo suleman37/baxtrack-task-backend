@@ -19,6 +19,7 @@ import {
   CustomerMutationResponse,
   CustomerNote,
   CustomerPaginationQuery,
+  PaginatedCustomerNotesResponse,
   CustomerResponse,
   PaginatedCustomersResponse,
 } from '../types/customers/customer.types';
@@ -118,7 +119,11 @@ export class CustomersService {
     return this.toCustomerResponse(customer);
   }
 
-  async findNotes(id: number, actor: AccessActor): Promise<CustomerNote[]> {
+  async findNotes(
+    id: number,
+    actor: AccessActor,
+    pagination: CustomerPaginationQuery,
+  ): Promise<PaginatedCustomerNotesResponse> {
     const customer = await this.customersRepository.findOne({
       where: {
         id,
@@ -130,7 +135,19 @@ export class CustomersService {
       throw new NotFoundException('Customer not found.');
     }
 
-    return this.getCustomerNotes(customer);
+    const notes = this.getCustomerNotes(customer);
+    const startIndex = (pagination.page - 1) * pagination.limit;
+    const paginatedNotes = notes.slice(startIndex, startIndex + pagination.limit);
+
+    return {
+      data: paginatedNotes,
+      pagination: {
+        page: pagination.page,
+        limit: pagination.limit,
+        total: notes.length,
+        totalPages: notes.length === 0 ? 0 : Math.ceil(notes.length / pagination.limit),
+      },
+    };
   }
 
   async addNote(

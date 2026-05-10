@@ -3,15 +3,17 @@ import {
   Controller,
   Get,
   Post,
+  Query,
   Req,
 } from '@nestjs/common';
 import {
   getAccessActorOrThrow,
   resolveCreatorForWrite,
 } from '../common/auth/access-context.util';
+import { parsePaginationQuery } from '../common/utils/pagination.util';
 import type {
   CreateUserPayload,
-  UserDetailsResponse,
+  PaginatedUsersResponse,
   UserResponse,
 } from '../types/users/user.types';
 import type { AuthenticatedRequest } from '../types/http/authenticated-request.types';
@@ -22,8 +24,15 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  findAll(@Req() request: AuthenticatedRequest): Promise<UserDetailsResponse[]> {
-    return this.usersService.findAll(getAccessActorOrThrow(request));
+  findAll(
+    @Query('page') page: string | undefined,
+    @Query('limit') limit: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PaginatedUsersResponse> {
+    return this.usersService.findAll(
+      getAccessActorOrThrow(request),
+      parsePaginationQuery(page, limit),
+    );
   }
 
   @Post()
