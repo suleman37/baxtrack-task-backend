@@ -43,11 +43,14 @@ export class LoginService {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
-    await this.logsService.recordAction({
+    void this.logsService.recordAction({
       action: 'login',
       actorId: user.id,
+      createdByName: user.name,
       userId: user.id,
+      userName: user.name,
       organizationId: user.organizationId ?? user.id,
+      organizationName: user.organizationName ?? user.name,
       details: `User ${user.name} logged in.`,
     });
 

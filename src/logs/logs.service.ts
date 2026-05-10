@@ -34,12 +34,17 @@ export class LogsService {
 
     try {
       await this.ensureLogsTable();
+      const metadata = await this.resolveLogMetadata(payload);
       await this.logsRepository.save(
         this.logsRepository.create({
           action,
-          actorId: payload.actorId ?? null,
-          userId: payload.userId ?? null,
-          organizationId: payload.organizationId ?? null,
+          actorId: metadata.actorId,
+          createdById: metadata.createdById,
+          createdByName: metadata.createdByName,
+          userId: metadata.userId,
+          userName: metadata.userName,
+          organizationId: metadata.organizationId,
+          organizationName: metadata.organizationName,
           details: payload.details?.trim() || null,
         }),
       );
@@ -100,10 +105,15 @@ export class LogsService {
       id: log.id,
       action: log.action,
       actorId: log.actorId,
+      createdById: log.createdById,
+      createdByName: log.createdByName,
       userId: log.userId,
+      userName: log.userName,
       organizationId: log.organizationId,
+      organizationName: log.organizationName,
       details: log.details,
       createdAt: log.createdAt,
+      updatedAt: log.updatedAt,
     };
   }
 
@@ -216,11 +226,42 @@ export class LogsService {
         );
       }
 
+      if (!table.findColumnByName('createdById')) {
+        missingColumns.push(
+          new TableColumn({
+            name: 'createdById',
+            type: 'integer',
+            isNullable: true,
+          }),
+        );
+      }
+
+      if (!table.findColumnByName('createdByName')) {
+        missingColumns.push(
+          new TableColumn({
+            name: 'createdByName',
+            type: 'varchar',
+            isNullable: false,
+            default: "'Unknown'",
+          }),
+        );
+      }
+
       if (!table.findColumnByName('userId')) {
         missingColumns.push(
           new TableColumn({
             name: 'userId',
             type: 'integer',
+            isNullable: true,
+          }),
+        );
+      }
+
+      if (!table.findColumnByName('userName')) {
+        missingColumns.push(
+          new TableColumn({
+            name: 'userName',
+            type: 'varchar',
             isNullable: true,
           }),
         );
@@ -236,11 +277,21 @@ export class LogsService {
         );
       }
 
+      if (!table.findColumnByName('organizationName')) {
+        missingColumns.push(
+          new TableColumn({
+            name: 'organizationName',
+            type: 'varchar',
+            isNullable: true,
+          }),
+        );
+      }
+
       if (!table.findColumnByName('details')) {
         missingColumns.push(
           new TableColumn({
             name: 'details',
-            type: 'text',
+            type: 'varchar',
             isNullable: true,
           }),
         );
@@ -250,6 +301,17 @@ export class LogsService {
         missingColumns.push(
           new TableColumn({
             name: 'createdAt',
+            type: 'timestamp',
+            isNullable: false,
+            default: 'CURRENT_TIMESTAMP',
+          }),
+        );
+      }
+
+      if (!table.findColumnByName('updatedAt')) {
+        missingColumns.push(
+          new TableColumn({
+            name: 'updatedAt',
             type: 'timestamp',
             isNullable: false,
             default: 'CURRENT_TIMESTAMP',
@@ -268,5 +330,36 @@ export class LogsService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  private async resolveLogMetadata(payload: LogRecordPayload): Promise<{
+    actorId: number | null;
+    createdById: number | null;
+    createdByName: string;
+    userId: number | null;
+    userName: string | null;
+    organizationId: number | null;
+    organizationName: string | null;
+  }> {
+    const actorId = payload.actorId ?? payload.createdById ?? null;
+    const userId = payload.userId ?? actorId;
+    const organizationId = payload.organizationId ?? null;
+
+    return {
+      actorId,
+      createdById: actorId,
+      createdByName:
+        payload.createdByName?.trim() ||
+        (actorId != null ? `User ${actorId}` : null) ||
+        'Unknown',
+      userId,
+      userName:
+        payload.userName?.trim() ||
+        (userId != null ? `User ${userId}` : null),
+      organizationId,
+      organizationName:
+        payload.organizationName?.trim() ||
+        (organizationId != null ? `Organization ${organizationId}` : null),
+    };
   }
 }
