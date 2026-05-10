@@ -178,14 +178,37 @@ export class CustomersService {
       notes: payload.notes.trim(),
     };
 
-    customer.notes = [...this.getCustomerNotes(customer), note];
-    const updatedCustomer = await this.customersRepository.save(customer);
+    await this.customersRepository
+      .createQueryBuilder()
+      .update(Customer)
+      .set({
+        notes: () => `COALESCE(notes, '[]'::jsonb) || :note::jsonb`,
+        updatedAt: () => 'CURRENT_TIMESTAMP',
+      })
+      .where('id = :id', { id: customer.id })
+      .setParameters({
+        note: JSON.stringify([note]),
+      })
+      .execute();
+
+    const updatedCustomer = await this.customersRepository.findOne({
+      where: {
+        id: customer.id,
+      },
+      relations: {
+        assignedTo: true,
+      },
+    });
+
+    if (!updatedCustomer) {
+      throw new NotFoundException('Customer not found.');
+    }
 
     await this.logsService.recordAction({
       action: 'add_customer_note',
       actorId: actor.id,
       userId: actor.id,
-      organizationId: customer.organizationId,
+      organizationId: updatedCustomer.organizationId,
       details: `Added note for customer ${customer.name}.`,
     });
 
