@@ -13,7 +13,9 @@ import { LogsService } from '../logs/logs.service';
 import { User } from '../users/user.entity';
 import {
   CreateCustomerPayload,
+  CreateCustomerNotePayload,
   CustomerMutationResponse,
+  CustomerNote,
   CustomerResponse,
 } from './customer.types';
 import { Customer } from './customer.entity';
@@ -68,8 +70,7 @@ export class CustomersService {
   async findAll(actor: AccessActor): Promise<CustomerResponse[]> {
     const qb = this.customersRepository
       .createQueryBuilder('customer')
-      .leftJoinAndSelect('customer.assignedTo', 'assignedTo')
-      .where('customer.status = :status', { status: 'active' });
+      .leftJoinAndSelect('customer.assignedTo', 'assignedTo');
 
     const orgKey = resolveCustomerOrganizationKey(actor);
     if (orgKey != null) {
@@ -97,6 +98,63 @@ export class CustomersService {
     }
 
     return this.toCustomerResponse(customer);
+  }
+
+  async findNotes(id: number, actor: AccessActor): Promise<CustomerNote[]> {
+    const customer = await this.customersRepository.findOne({
+      where: {
+        id,
+        status: 'active',
+      },
+    });
+
+    if (!customer || !this.canAccessCustomer(actor, customer)) {
+      throw new NotFoundException('Customer not found.');
+    }
+
+    return this.getCustomerNotes(customer);
+  }
+
+  async addNote(
+    id: number,
+    payload: CreateCustomerNotePayload,
+    actor: AccessActor,
+  ): Promise<CustomerResponse> {
+    this.validateCustomerNotePayload(payload);
+
+    const customer = await this.customersRepository.findOne({
+      where: {
+        id,
+        status: 'active',
+      },
+      relations: {
+        assignedTo: true,
+      },
+    });
+
+    if (!customer || !this.canAccessCustomer(actor, customer)) {
+      throw new NotFoundException('Customer not found.');
+    }
+
+    const note: CustomerNote = {
+      createdById: actor.id,
+      organizationId: actor.organizationId ?? actor.id,
+      customerId: customer.id,
+      notes: payload.notes.trim(),
+    };
+
+    customer.notes = [...this.getCustomerNotes(customer), note];
+    const updatedCustomer = await this.customersRepository.save(customer);
+
+    await this.logsService.recordAction({
+      action: 'add_customer_note',
+      actorId: actor.id,
+      userId: actor.id,
+      organizationId: customer.organizationId,
+      details: `Added note for customer ${customer.name}.`,
+    });
+
+    return this.toCustomerResponse(updatedCustomer);
   }
 
   async softDelete(id: number, actor: AccessActor): Promise<CustomerMutationResponse> {
@@ -193,6 +251,20 @@ export class CustomersService {
     }
   }
 
+  private validateCustomerNotePayload(payload: CreateCustomerNotePayload): void {
+    if (!payload || typeof payload.notes !== 'string') {
+      throw new BadRequestException('Invalid customer note payload.');
+    }
+
+    if (payload.notes.trim().length === 0) {
+      throw new BadRequestException('Note is required.');
+    }
+  }
+
+  private getCustomerNotes(customer: Customer): CustomerNote[] {
+    return Array.isArray(customer.notes) ? customer.notes : [];
+  }
+
   private async resolveAssignedUser(
     assignedTo: CreateCustomerPayload['assignedTo'],
   ): Promise<User | null> {
@@ -258,6 +330,7 @@ export class CustomersService {
       phone: customer.phone,
       organizationId: customer.organizationId,
       createdById: customer.createdById,
+      notes: this.getCustomerNotes(customer),
       status: customer.status,
       assignedTo: customer.assignedTo.id,
       assignedToName: customer.assignedTo.name,

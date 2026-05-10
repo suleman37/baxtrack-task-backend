@@ -20,6 +20,8 @@ import { OrganizationScopeGuard } from '../auth/organization-scope.guard';
 import type { UserRole } from '../enums/user-role.enum';
 import type {
   CreateCustomerPayload,
+  CreateCustomerNotePayload,
+  CustomerNote,
   CustomerMutationResponse,
   CustomerResponse,
 } from './customer.types';
@@ -50,6 +52,27 @@ export class CustomersController {
     @Req() request: AuthenticatedRequest,
   ): Promise<CustomerResponse> {
     return this.customersService.findOne(id, this.toAccessActor(request));
+  }
+
+  @Get(':id/notes')
+  findNotes(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CustomerNote[]> {
+    return this.customersService.findNotes(id, this.toAccessActor(request));
+  }
+
+  @Post(':id/notes')
+  addNote(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() payload: CreateCustomerNotePayload,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CustomerResponse> {
+    return this.customersService.addNote(
+      id,
+      payload,
+      resolveCreatorForWrite(this.toAccessActor(request)),
+    );
   }
 
   @Post()

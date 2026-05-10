@@ -8,6 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../users/user.entity';
+import type { CustomerNote } from './customer.types';
 
 @Entity('customers')
 export class Customer {
@@ -28,6 +29,9 @@ export class Customer {
 
   @Column({ type: 'integer', nullable: true })
   createdById: number | null;
+
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  notes: CustomerNote[];
 
   @Column({ type: 'varchar', default: 'active' })
   status: string;

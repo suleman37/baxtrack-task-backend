@@ -5,6 +5,17 @@ export interface CreateCustomerPayload {
   assignedTo: number | string;
 }
 
+export interface CreateCustomerNotePayload {
+  notes: string;
+}
+
+export interface CustomerNote {
+  createdById: number | null;
+  organizationId: number | null;
+  customerId: number;
+  notes: string;
+}
+
 export interface CustomerResponse {
   id: number;
   name: string;
@@ -12,6 +23,7 @@ export interface CustomerResponse {
   phone: string;
   organizationId: number | null;
   createdById: number | null;
+  notes: CustomerNote[];
   status: string;
   assignedTo: number;
   assignedToName: string;
