@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository, Table, TableColumn } from 'typeorm';
 import { resolveCustomerOrganizationKey } from '../common/auth/access-context.util';
 import type { PaginationQuery } from '../types/common/pagination.types';
 import type { AccessActor } from '../types/common/access-context.types';
@@ -14,8 +14,10 @@ import { Log } from './log.entity';
 @Injectable()
 export class LogsService {
   private readonly logger = new Logger(LogsService.name);
+  private ensureSchemaPromise: Promise<void> | null = null;
 
   constructor(
+    private readonly dataSource: DataSource,
     @InjectRepository(Log)
     private readonly logsRepository: Repository<Log>,
   ) {}
@@ -31,6 +33,7 @@ export class LogsService {
     }
 
     try {
+      await this.ensureLogsTable();
       await this.logsRepository.save(
         this.logsRepository.create({
           action,
@@ -51,6 +54,7 @@ export class LogsService {
     actor: AccessActor,
     pagination: PaginationQuery,
   ): Promise<PaginatedLogsResponse> {
+    await this.ensureLogsTable();
     const queryBuilder = this.logsRepository.createQueryBuilder('log');
     const orgKey = resolveCustomerOrganizationKey(actor);
 
@@ -109,5 +113,160 @@ export class LogsService {
     }
 
     return 'Unknown error';
+  }
+
+  private async ensureLogsTable(): Promise<void> {
+    if (this.ensureSchemaPromise) {
+      return this.ensureSchemaPromise;
+    }
+
+    this.ensureSchemaPromise = this.syncLogsTable().finally(() => {
+      this.ensureSchemaPromise = null;
+    });
+
+    return this.ensureSchemaPromise;
+  }
+
+  private async syncLogsTable(): Promise<void> {
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    await queryRunner.connect();
+
+    try {
+      const hasLogsTable = await queryRunner.hasTable('logs');
+
+      if (!hasLogsTable) {
+        await queryRunner.createTable(
+          new Table({
+            name: 'logs',
+            columns: [
+              {
+                name: 'id',
+                type: 'integer',
+                isPrimary: true,
+                isGenerated: true,
+                generationStrategy: 'increment',
+              },
+              {
+                name: 'action',
+                type: 'varchar',
+                isNullable: false,
+              },
+              {
+                name: 'actorId',
+                type: 'integer',
+                isNullable: true,
+              },
+              {
+                name: 'userId',
+                type: 'integer',
+                isNullable: true,
+              },
+              {
+                name: 'organizationId',
+                type: 'integer',
+                isNullable: true,
+              },
+              {
+                name: 'details',
+                type: 'text',
+                isNullable: true,
+              },
+              {
+                name: 'createdAt',
+                type: 'timestamp',
+                default: 'CURRENT_TIMESTAMP',
+                isNullable: false,
+              },
+            ],
+          }),
+          true,
+        );
+
+        this.logger.log('Created missing "logs" table automatically.');
+        return;
+      }
+
+      const table = await queryRunner.getTable('logs');
+
+      if (!table) {
+        return;
+      }
+
+      const missingColumns: TableColumn[] = [];
+
+      if (!table.findColumnByName('action')) {
+        missingColumns.push(
+          new TableColumn({
+            name: 'action',
+            type: 'varchar',
+            isNullable: false,
+            default: "''",
+          }),
+        );
+      }
+
+      if (!table.findColumnByName('actorId')) {
+        missingColumns.push(
+          new TableColumn({
+            name: 'actorId',
+            type: 'integer',
+            isNullable: true,
+          }),
+        );
+      }
+
+      if (!table.findColumnByName('userId')) {
+        missingColumns.push(
+          new TableColumn({
+            name: 'userId',
+            type: 'integer',
+            isNullable: true,
+          }),
+        );
+      }
+
+      if (!table.findColumnByName('organizationId')) {
+        missingColumns.push(
+          new TableColumn({
+            name: 'organizationId',
+            type: 'integer',
+            isNullable: true,
+          }),
+        );
+      }
+
+      if (!table.findColumnByName('details')) {
+        missingColumns.push(
+          new TableColumn({
+            name: 'details',
+            type: 'text',
+            isNullable: true,
+          }),
+        );
+      }
+
+      if (!table.findColumnByName('createdAt')) {
+        missingColumns.push(
+          new TableColumn({
+            name: 'createdAt',
+            type: 'timestamp',
+            isNullable: false,
+            default: 'CURRENT_TIMESTAMP',
+          }),
+        );
+      }
+
+      if (missingColumns.length > 0) {
+        await queryRunner.addColumns('logs', missingColumns);
+        this.logger.warn(
+          `Added missing columns to "logs" table: ${missingColumns
+            .map((column) => column.name)
+            .join(', ')}`,
+        );
+      }
+    } finally {
+      await queryRunner.release();
+    }
   }
 }
