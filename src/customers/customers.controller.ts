@@ -6,6 +6,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Query,
   Req,
   UnauthorizedException,
   UseGuards,
@@ -23,7 +24,9 @@ import type {
   CreateCustomerNotePayload,
   CustomerNote,
   CustomerMutationResponse,
+  CustomerPaginationQuery,
   CustomerResponse,
+  PaginatedCustomersResponse,
 } from './customer.types';
 import { CustomersService } from './customers.service';
 
@@ -42,8 +45,15 @@ export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
   @Get()
-  findAll(@Req() request: AuthenticatedRequest): Promise<CustomerResponse[]> {
-    return this.customersService.findAll(this.toAccessActor(request));
+  findAll(
+    @Query('page') page: string | undefined,
+    @Query('limit') limit: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PaginatedCustomersResponse> {
+    return this.customersService.findAll(
+      this.toAccessActor(request),
+      this.toPaginationQuery(page, limit),
+    );
   }
 
   @Get(':id')
@@ -106,5 +116,37 @@ export class CustomersController {
       role: u.role,
       organizationScope: request.organizationScope,
     };
+  }
+
+  private toPaginationQuery(
+    page?: string,
+    limit?: string,
+  ): CustomerPaginationQuery {
+    return {
+      page: this.parsePositiveInteger(page, 1),
+      limit: this.parsePositiveInteger(limit, 10, 100),
+    };
+  }
+
+  private parsePositiveInteger(
+    value: string | undefined,
+    fallback: number,
+    max?: number,
+  ): number {
+    if (value == null || value.trim().length === 0) {
+      return fallback;
+    }
+
+    const parsedValue = Number(value);
+
+    if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
+      return fallback;
+    }
+
+    if (max != null && parsedValue > max) {
+      return max;
+    }
+
+    return parsedValue;
   }
 }

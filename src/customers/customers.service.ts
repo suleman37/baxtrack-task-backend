@@ -16,7 +16,9 @@ import {
   CreateCustomerNotePayload,
   CustomerMutationResponse,
   CustomerNote,
+  CustomerPaginationQuery,
   CustomerResponse,
+  PaginatedCustomersResponse,
 } from './customer.types';
 import { Customer } from './customer.entity';
 import { syncPrimaryKeySequence } from '../database/sync-primary-key-sequence';
@@ -67,7 +69,10 @@ export class CustomersService {
     return this.toCustomerResponse(savedCustomer);
   }
 
-  async findAll(actor: AccessActor): Promise<CustomerResponse[]> {
+  async findAll(
+    actor: AccessActor,
+    pagination: CustomerPaginationQuery,
+  ): Promise<PaginatedCustomersResponse> {
     const qb = this.customersRepository
       .createQueryBuilder('customer')
       .leftJoinAndSelect('customer.assignedTo', 'assignedTo');
@@ -77,9 +82,21 @@ export class CustomersService {
       qb.andWhere('customer.organizationId = :orgId', { orgId: orgKey });
     }
 
-    const customers = await qb.orderBy('customer.id', 'ASC').getMany();
+    const [customers, total] = await qb
+      .orderBy('customer.id', 'ASC')
+      .skip((pagination.page - 1) * pagination.limit)
+      .take(pagination.limit)
+      .getManyAndCount();
 
-    return customers.map((customer) => this.toCustomerResponse(customer));
+    return {
+      data: customers.map((customer) => this.toCustomerResponse(customer)),
+      pagination: {
+        page: pagination.page,
+        limit: pagination.limit,
+        total,
+        totalPages: total === 0 ? 0 : Math.ceil(total / pagination.limit),
+      },
+    };
   }
 
   async findOne(id: number, actor: AccessActor): Promise<CustomerResponse> {

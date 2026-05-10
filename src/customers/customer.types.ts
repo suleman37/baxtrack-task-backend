@@ -34,3 +34,20 @@ export interface CustomerResponse {
 export interface CustomerMutationResponse {
   message: string;
 }
+
+export interface CustomerPaginationQuery {
+  page: number;
+  limit: number;
+}
+
+export interface CustomerPaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface PaginatedCustomersResponse {
+  data: CustomerResponse[];
+  pagination: CustomerPaginationMeta;
+}
