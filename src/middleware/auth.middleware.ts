@@ -73,8 +73,8 @@ export class AuthMiddleware implements NestMiddleware {
         );
       }
 
-      await this.assertOrganizationExists(organizationScope);
-      request.organizationScope = organizationScope;
+      request.organizationScope =
+        await this.resolveOrganizationScope(organizationScope);
       next();
     } catch (error) {
       next(error);
@@ -152,7 +152,7 @@ export class AuthMiddleware implements NestMiddleware {
     return undefined;
   }
 
-  private async assertOrganizationExists(orgId: number): Promise<void> {
+  private async resolveOrganizationScope(orgId: number): Promise<number> {
     const orgAdmin = await this.usersRepository.findOne({
       where: {
         id: orgId,
@@ -161,17 +161,26 @@ export class AuthMiddleware implements NestMiddleware {
     });
 
     if (orgAdmin) {
-      return;
+      return orgAdmin.id;
     }
 
-    const member = await this.usersRepository.exist({
+    const scopedUser = await this.usersRepository.findOne({
       where: {
-        organizationId: orgId,
+        id: orgId,
       },
     });
 
-    if (member) {
-      return;
+    if (scopedUser?.organizationId != null) {
+      const scopedOrgAdmin = await this.usersRepository.findOne({
+        where: {
+          id: scopedUser.organizationId,
+          role: 'admin',
+        },
+      });
+
+      if (scopedOrgAdmin) {
+        return scopedOrgAdmin.id;
+      }
     }
 
     throw new NotFoundException('Organization not found.');
