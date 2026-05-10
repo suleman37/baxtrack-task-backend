@@ -1,4 +1,5 @@
 import type { TypeOrmModuleOptions } from '@nestjs/typeorm';
+import { Pool } from 'pg';
 import type { DataSourceOptions } from 'typeorm';
 
 try {
@@ -17,7 +18,50 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
+export const DATABASE_CONNECTION = 'DATABASE_CONNECTION';
+
+function getDatabaseSslConfig() {
+  return {
+    rejectUnauthorized: false,
+  };
+}
+
+function getDatabaseConnectionString(): string {
+  const connectionString = getRequiredEnv('DATABASE_URL');
+
+  try {
+    const normalizedUrl = new URL(connectionString);
+    normalizedUrl.searchParams.delete('sslmode');
+    normalizedUrl.searchParams.delete('uselibpqcompat');
+    return normalizedUrl.toString();
+  } catch {
+    return connectionString;
+  }
+}
+
+export const databaseConnectionProvider = {
+  provide: DATABASE_CONNECTION,
+  useFactory: () => {
+    return new Pool({
+      connectionString: getDatabaseConnectionString(),
+      ssl: getDatabaseSslConfig(),
+    });
+  },
+};
+
 export function getDatabaseOptions(): TypeOrmModuleOptions & DataSourceOptions {
+  const databaseUrl = process.env.DATABASE_URL;
+
+  if (typeof databaseUrl === 'string' && databaseUrl.length > 0) {
+    return {
+      type: 'postgres',
+      url: getDatabaseConnectionString(),
+      ssl: getDatabaseSslConfig(),
+      autoLoadEntities: true,
+      synchronize: false,
+    };
+  }
+
   return {
     type: 'postgres',
     host: getRequiredEnv('DB_HOST'),
@@ -26,6 +70,6 @@ export function getDatabaseOptions(): TypeOrmModuleOptions & DataSourceOptions {
     password: getRequiredEnv('DB_PASSWORD'),
     database: getRequiredEnv('DB_NAME'),
     autoLoadEntities: true,
-    synchronize: true,
+    synchronize: false,
   };
 }
