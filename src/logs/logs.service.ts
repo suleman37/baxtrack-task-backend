@@ -103,7 +103,7 @@ export class LogsService {
   private toLogResponse(log: Log): LogResponse {
     return {
       id: log.id,
-      action: log.action,
+      action: this.formatAction(log.action),
       actorId: log.actorId,
       createdById: log.createdById,
       createdByName: log.createdByName,
@@ -123,6 +123,16 @@ export class LogsService {
     }
 
     return 'Unknown error';
+  }
+
+  private formatAction(action: string): string {
+    const normalizedAction = action.trim().replace(/_/g, ' ');
+
+    if (normalizedAction.length === 0) {
+      return action;
+    }
+
+    return normalizedAction.charAt(0).toUpperCase() + normalizedAction.slice(1);
   }
 
   private async ensureLogsTable(): Promise<void> {
