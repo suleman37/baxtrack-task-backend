@@ -4,7 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
+import {
+  type AccessActor,
+  resolveCustomerOrganizationKey,
+} from '../auth/access-context.util';
 import { User } from '../users/user.entity';
 import {
   CreateCustomerPayload,
@@ -23,21 +27,17 @@ export class CustomersService {
     private readonly usersRepository: Repository<User>,
   ) {}
 
-  async create(
-    customer: CreateCustomerPayload,
-    createdById?: number,
-  ): Promise<CustomerResponse> {
+  async create(customer: CreateCustomerPayload, creator: AccessActor): Promise<CustomerResponse> {
     this.validateCustomer(customer);
 
-    const assignedUser = await this.usersRepository.findOne({
-      where: {
-        id: customer.assignedTo,
-      },
-    });
+    const assignedUser = await this.resolveAssignedUser(customer.assignedTo);
 
     if (!assignedUser) {
       throw new NotFoundException('Assigned user not found.');
     }
+
+    const orgKey = resolveCustomerOrganizationKey(creator);
+    this.assertUserInOrganization(assignedUser, orgKey, creator);
 
     await syncPrimaryKeySequence(this.customersRepository);
     const savedCustomer = await this.customersRepository.save(
@@ -45,7 +45,9 @@ export class CustomersService {
         name: customer.name.trim(),
         email: customer.email.trim().toLowerCase(),
         phone: customer.phone.trim(),
-        createdById: createdById ?? null,
+        organizationId: creator.organizationId ?? creator.id,
+        createdById: creator.id,
+        status: 'active',
         assignedTo: assignedUser,
       }),
     );
@@ -53,57 +55,91 @@ export class CustomersService {
     return this.toCustomerResponse(savedCustomer);
   }
 
-  async findAll(): Promise<CustomerResponse[]> {
-    const customers = await this.customersRepository.find({
-      where: {
-        deletedAt: IsNull(),
-      },
-      relations: {
-        assignedTo: true,
-      },
-      order: {
-        id: 'ASC',
-      },
-    });
+  async findAll(actor: AccessActor): Promise<CustomerResponse[]> {
+    const qb = this.customersRepository
+      .createQueryBuilder('customer')
+      .leftJoinAndSelect('customer.assignedTo', 'assignedTo')
+      .where('customer.status = :status', { status: 'active' });
+
+    const orgKey = resolveCustomerOrganizationKey(actor);
+    if (orgKey != null) {
+      qb.andWhere('customer.organizationId = :orgId', { orgId: orgKey });
+    }
+
+    const customers = await qb.orderBy('customer.id', 'ASC').getMany();
 
     return customers.map((customer) => this.toCustomerResponse(customer));
   }
 
-  async findOne(id: number): Promise<CustomerResponse> {
+  async findOne(id: number, actor: AccessActor): Promise<CustomerResponse> {
     const customer = await this.customersRepository.findOne({
       where: {
         id,
-        deletedAt: IsNull(),
+        status: 'active',
       },
       relations: {
         assignedTo: true,
       },
     });
 
-    if (!customer) {
+    if (!customer || !this.canAccessCustomer(actor, customer)) {
       throw new NotFoundException('Customer not found.');
     }
 
     return this.toCustomerResponse(customer);
   }
 
-  async softDelete(id: number): Promise<CustomerMutationResponse> {
+  async softDelete(id: number, actor: AccessActor): Promise<CustomerMutationResponse> {
     const customer = await this.customersRepository.findOne({
       where: {
         id,
-        deletedAt: IsNull(),
       },
     });
 
-    if (!customer) {
+    if (!customer || !this.canAccessCustomer(actor, customer)) {
       throw new NotFoundException('Customer not found.');
     }
 
-    await this.customersRepository.softDelete(id);
+    customer.status = customer.status === 'deleted' ? 'active' : 'deleted';
+    await this.customersRepository.save(customer);
 
     return {
-      message: 'Customer deleted successfully',
+      message:
+        customer.status === 'deleted'
+          ? 'Customer deleted successfully'
+          : 'Customer restored successfully',
     };
+  }
+
+  private canAccessCustomer(actor: AccessActor, customer: Customer): boolean {
+    if (actor.role === 'super_admin' && actor.organizationScope == null) {
+      return true;
+    }
+
+    const orgKey = resolveCustomerOrganizationKey(actor);
+    return customer.organizationId === orgKey;
+  }
+
+  private assertUserInOrganization(
+    assignedUser: User,
+    orgKey: number | null,
+    creator?: AccessActor,
+  ): void {
+    if (creator?.role === 'super_admin' && creator.organizationScope == null) {
+      return;
+    }
+
+    if (orgKey == null) {
+      return;
+    }
+
+    const inOrg =
+      assignedUser.id === orgKey || assignedUser.organizationId === orgKey;
+    if (!inOrg) {
+      throw new BadRequestException(
+        'Assigned user does not belong to this organization.',
+      );
+    }
   }
 
   private validateCustomer(customer: CreateCustomerPayload): void {
@@ -112,7 +148,8 @@ export class CustomersService {
       typeof customer.name !== 'string' ||
       typeof customer.email !== 'string' ||
       typeof customer.phone !== 'string' ||
-      typeof customer.assignedTo !== 'number'
+      (typeof customer.assignedTo !== 'number' &&
+        typeof customer.assignedTo !== 'string')
     ) {
       throw new BadRequestException('Invalid customer payload.');
     }
@@ -128,6 +165,70 @@ export class CustomersService {
     if (!customer.email.includes('@')) {
       throw new BadRequestException('A valid email is required.');
     }
+
+    if (
+      typeof customer.assignedTo === 'string' &&
+      customer.assignedTo.trim().length === 0
+    ) {
+      throw new BadRequestException('Assigned user is required.');
+    }
+  }
+
+  private async resolveAssignedUser(
+    assignedTo: CreateCustomerPayload['assignedTo'],
+  ): Promise<User | null> {
+    if (typeof assignedTo === 'number') {
+      return this.usersRepository.findOne({
+        where: {
+          id: assignedTo,
+        },
+      });
+    }
+
+    const assignedToValue = assignedTo.trim();
+
+    if (assignedToValue.length === 0) {
+      return null;
+    }
+
+    const numericId = Number(assignedToValue);
+
+    if (Number.isInteger(numericId) && numericId > 0) {
+      const userById = await this.usersRepository.findOne({
+        where: {
+          id: numericId,
+        },
+      });
+
+      if (userById) {
+        return userById;
+      }
+    }
+
+    const normalizedValue = assignedToValue.toLowerCase();
+
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .where(
+        new Brackets((query) => {
+          query
+            .where('LOWER(TRIM(user.email)) = :value', {
+              value: normalizedValue,
+            })
+            .orWhere('LOWER(TRIM(user.name)) = :value', {
+              value: normalizedValue,
+            });
+        }),
+      )
+      .orderBy(
+        `CASE
+          WHEN LOWER(TRIM(user.email)) = :value THEN 0
+          WHEN LOWER(TRIM(user.name)) = :value THEN 1
+          ELSE 2
+        END`,
+        'ASC',
+      )
+      .getOne();
   }
 
   private toCustomerResponse(customer: Customer): CustomerResponse {
@@ -138,10 +239,11 @@ export class CustomersService {
       phone: customer.phone,
       organizationId: customer.organizationId,
       createdById: customer.createdById,
+      status: customer.status,
       assignedTo: customer.assignedTo.id,
+      assignedToName: customer.assignedTo.name,
       createdAt: customer.createdAt,
       updatedAt: customer.updatedAt,
-      deletedAt: customer.deletedAt,
     };
   }
 }

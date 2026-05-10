@@ -2,7 +2,7 @@ export interface CreateCustomerPayload {
   name: string;
   email: string;
   phone: string;
-  assignedTo: number;
+  assignedTo: number | string;
 }
 
 export interface CustomerResponse {
@@ -12,10 +12,11 @@ export interface CustomerResponse {
   phone: string;
   organizationId: number | null;
   createdById: number | null;
+  status: string;
   assignedTo: number;
+  assignedToName: string;
   createdAt: Date;
   updatedAt: Date;
-  deletedAt: Date | null;
 }
 
 export interface CustomerMutationResponse {

@@ -1,7 +1,6 @@
 import {
   Column,
   CreateDateColumn,
-  DeleteDateColumn,
   Entity,
   JoinColumn,
   ManyToOne,
@@ -30,6 +29,9 @@ export class Customer {
   @Column({ type: 'integer', nullable: true })
   createdById: number | null;
 
+  @Column({ type: 'varchar', default: 'active' })
+  status: string;
+
   @ManyToOne(() => User, { nullable: false })
   @JoinColumn({ name: 'assignedTo' })
   assignedTo: User;
@@ -39,7 +41,4 @@ export class Customer {
 
   @UpdateDateColumn()
   updatedAt: Date;
-
-  @DeleteDateColumn({ nullable: true })
-  deletedAt: Date | null;
 }

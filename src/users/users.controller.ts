@@ -4,10 +4,16 @@ import {
   Get,
   Post,
   Req,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import {
+  type AccessActor,
+  resolveCreatorForWrite,
+} from '../auth/access-context.util';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OrganizationScopeGuard } from '../auth/organization-scope.guard';
 import type { UserRole } from '../enums/user-role.enum';
 import type {
   CreateUserPayload,
@@ -22,16 +28,17 @@ type AuthenticatedRequest = Request & {
     organizationId?: number | null;
     role?: UserRole | null;
   };
+  organizationScope?: number;
 };
 
 @Controller('users')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, OrganizationScopeGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
   findAll(@Req() request: AuthenticatedRequest): Promise<UserDetailsResponse[]> {
-    return this.usersService.findAll(request.user?.id);
+    return this.usersService.findAll(this.toAccessActor(request));
   }
 
   @Post()
@@ -39,6 +46,23 @@ export class UsersController {
     @Body() user: CreateUserPayload,
     @Req() request: AuthenticatedRequest,
   ): Promise<UserResponse> {
-    return this.usersService.create(user, request.user);
+    return this.usersService.create(
+      user,
+      resolveCreatorForWrite(this.toAccessActor(request)),
+    );
+  }
+
+  private toAccessActor(request: AuthenticatedRequest): AccessActor {
+    const u = request.user;
+    if (!u) {
+      throw new UnauthorizedException('Invalid or expired token.');
+    }
+
+    return {
+      id: u.id,
+      organizationId: u.organizationId,
+      role: u.role,
+      organizationScope: request.organizationScope,
+    };
   }
 }

@@ -12,6 +12,7 @@ import {
   isCreatableUserRole,
   type UserRole,
 } from '../enums/user-role.enum';
+import type { AccessActor } from '../auth/access-context.util';
 import { User } from './user.entity';
 import { hashPassword } from './password.util';
 import { CreateUserPayload, UserDetailsResponse, UserResponse } from './user.types';
@@ -73,18 +74,27 @@ export class UsersService {
     };
   }
 
-  async findAll(createdById?: number): Promise<UserDetailsResponse[]> {
-    if (!Number.isInteger(createdById) || createdById! <= 0) {
+  async findAll(actor: AccessActor): Promise<UserDetailsResponse[]> {
+    const viewerId = actor.id;
+    if (!Number.isInteger(viewerId) || viewerId <= 0) {
       throw new UnauthorizedException('Invalid or expired token.');
     }
 
+    if (actor.role === 'super_admin' && actor.organizationScope == null) {
+      const users = await this.usersRepository.find({
+        order: { id: 'ASC' },
+      });
+      return users.map((user) => this.toUserResponse(user));
+    }
+
+    const createdByFilter =
+      actor.role === 'super_admin' && actor.organizationScope != null
+        ? actor.organizationScope
+        : viewerId;
+
     const users = await this.usersRepository.find({
-      where: {
-        createdById,
-      },
-      order: {
-        id: 'ASC',
-      },
+      where: { createdById: createdByFilter },
+      order: { id: 'ASC' },
     });
 
     return users.map((user) => this.toUserResponse(user));
